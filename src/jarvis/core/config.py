@@ -16,6 +16,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_AI_MODEL = "claude-opus-5-5"
 
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -33,6 +35,15 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ANTHROPIC_API_KEY", "JARVIS_ANTHROPIC_API_KEY"),
     )
     ai_model: str = DEFAULT_AI_MODEL
+    # How hard the model thinks: low = fastest replies (good for voice), higher = deeper planning.
+    ai_effort: Effort = "low"
+    ai_max_tokens: int = Field(default=16000, ge=1024, le=128000)
+    ai_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
+    ai_max_retries: int = Field(default=2, ge=0, le=5)
+    # Short-term context: after this many exchanges the conversation is summarized and restarted.
+    ai_max_turns: int = Field(default=30, ge=2, le=500)
+    # On a safety-classifier decline, let the API retry on Anthropic's recommended fallback model.
+    ai_fallbacks: bool = True
 
     # --- Personalization ---
     user_title: str = Field(default="Boss", min_length=1, max_length=40)

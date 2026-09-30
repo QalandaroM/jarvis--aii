@@ -10,7 +10,9 @@ from collections.abc import Sequence
 from pydantic import ValidationError
 
 from jarvis import __version__
-from jarvis.app import JarvisApp, StubResponder
+from jarvis.ai.brain import AIBrain
+from jarvis.ai.client import create_message_function
+from jarvis.app import JarvisApp, Responder, StubResponder
 from jarvis.core.config import Settings, get_settings
 from jarvis.core.logging_setup import setup_logging
 from jarvis.core.redaction import Redactor
@@ -24,7 +26,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"jarvis {__version__}")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("chat", help="текстовый режим (по умолчанию)")
-    sub.add_parser("doctor", help="проверить окружение и настройки")
+    doctor = sub.add_parser("doctor", help="проверить окружение и настройки")
+    doctor.add_argument(
+        "--online", action="store_true", help="также проверить API-ключ и модель (нужен интернет)"
+    )
     return parser
 
 
@@ -49,11 +54,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     if args.command == "doctor":
-        return run_doctor(settings)
+        return run_doctor(settings, online=args.online)
 
     setup_logging(settings, Redactor())
-    logging.getLogger("jarvis").info("JARVIS %s starting", __version__)
-    return JarvisApp(settings, StubResponder()).run()
+    log = logging.getLogger("jarvis")
+    log.info("JARVIS %s starting (model=%s)", __version__, settings.ai_model)
+    return JarvisApp(settings, _build_responder(settings)).run()
+
+
+def _build_responder(settings: Settings) -> Responder:
+    if not settings.has_api_key:
+        logging.getLogger("jarvis").warning("no API key: AI Brain disabled")
+        return StubResponder()
+    return AIBrain(settings, create_message_function(settings))
 
 
 if __name__ == "__main__":

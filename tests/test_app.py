@@ -16,10 +16,16 @@ class RecordingResponder:
         self.received.append(command)
         return f"ok: {command}"
 
+    def reset(self) -> None:
+        pass
+
 
 class FailingResponder:
     def respond(self, command: str) -> str:
         raise RuntimeError("AI down")
+
+    def reset(self) -> None:
+        pass
 
 
 @pytest.fixture
@@ -83,3 +89,43 @@ def test_run_loop_handles_ctrl_c(settings: Settings) -> None:
 def test_user_title_used(make_settings: Callable[..., Settings]) -> None:
     reply = JarvisApp(make_settings(user_title="Sir"), StubResponder()).handle("exit")
     assert reply is not None and "Sir" in reply.text
+
+
+class ResettableResponder(RecordingResponder):
+    def __init__(self) -> None:
+        super().__init__()
+        self.resets = 0
+
+    def reset(self) -> None:
+        self.resets += 1
+
+
+@pytest.mark.parametrize("raw", ["reset", "Jarvis, новый разговор", "сброс"])
+def test_reset_command(settings: Settings, raw: str) -> None:
+    responder = ResettableResponder()
+    reply = JarvisApp(settings, responder).handle(raw)
+    assert reply is not None and "новый разговор" in reply.text
+    assert responder.resets == 1
+    assert responder.received == []
+
+
+def test_ctrl_c_during_command_cancels_only_that_command(settings: Settings) -> None:
+    class SlowResponder(RecordingResponder):
+        def respond(self, command: str) -> str:
+            if command == "долгий запрос":
+                raise KeyboardInterrupt
+            return super().respond(command)
+
+    inputs: Iterator[str] = iter(["долгий запрос", "привет", "exit"])
+    outputs: list[str] = []
+    app = JarvisApp(
+        settings, SlowResponder(), input_fn=lambda _: next(inputs), output_fn=outputs.append
+    )
+    assert app.run() == 0
+    assert "Отменено, Boss." in outputs
+    assert "ok: привет" in outputs
+
+
+def test_stub_explains_missing_key(settings: Settings) -> None:
+    reply = JarvisApp(settings, StubResponder()).handle("привет")
+    assert reply is not None and "ANTHROPIC_API_KEY" in reply.text

@@ -53,3 +53,16 @@ def test_invalid_language_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JARVIS_LANGUAGE", "klingon")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_ai_defaults(make_settings: Callable[..., Settings]) -> None:
+    settings = make_settings()
+    assert settings.ai_effort == "low"
+    assert settings.ai_fallbacks is True
+    assert settings.ai_max_turns == 30
+
+
+def test_invalid_effort_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVIS_AI_EFFORT", "turbo")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
